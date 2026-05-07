@@ -11,6 +11,7 @@ import {
   Wind, 
   Calculator, 
   Info,
+  MapPin,
   ChevronDown,
   ChevronUp,
   FileText,
@@ -166,48 +167,81 @@ export default function App() {
     setIsExporting(true);
     
     try {
-      // Small delay to ensure any pending renders are complete
-      await new Promise(resolve => setTimeout(resolve, 100));
-
       const element = printRef.current;
+      
+      // Ensure images are fully loaded before capturing
+      const images = element.getElementsByTagName('img');
+      const imagePromises = Array.from(images).map(imgNode => {
+        const img = imgNode as HTMLImageElement;
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+          setTimeout(resolve, 2000); // 2s timeout
+        });
+      });
+      
+      await Promise.all(imagePromises);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 2.5,
         useCORS: true,
+        allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
         windowWidth: 800,
-        y: 0,
-        scrollX: 0,
-        scrollY: 0
+        onclone: (clonedDoc) => {
+          const clonedElement = clonedDoc.querySelector('[data-print-container]');
+          if (clonedElement) {
+            const el = clonedElement as HTMLElement;
+            el.style.position = 'static';
+            el.style.left = 'auto';
+            el.style.top = 'auto';
+            el.style.opacity = '1';
+            el.style.visibility = 'visible';
+            el.style.color = '#0f172a';
+            el.style.backgroundColor = '#ffffff';
+            
+            // Force all text and borders to hex if oklch is found 
+            // This is a catch-all for any missed Tailwind classes
+            const allElements = el.querySelectorAll('*');
+            allElements.forEach(item => {
+              const htmlEl = item as HTMLElement;
+              const style = window.getComputedStyle(htmlEl);
+              if (style.color.includes('oklch')) htmlEl.style.color = '#0f172a';
+              if (style.borderColor.includes('oklch')) htmlEl.style.borderColor = '#e2e8f0';
+              if (style.backgroundColor.includes('oklch')) htmlEl.style.backgroundColor = '#ffffff';
+            });
+          }
+        }
       });
       
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      
+      // Calculate dimensions based on canvas aspect ratio
+      const pdfWidth = 595; // A4 standard width in points
+      const pdfHeight = pdfWidth * (canvas.height / canvas.width);
+      
       const pdf = new jsPDF({
         orientation: 'portrait',
-        unit: 'px',
-        format: 'a4'
+        unit: 'pt',
+        format: [pdfWidth, pdfHeight]
       });
       
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       
-      const imgProps = pdf.getImageProperties(imgData);
-      const ratio = imgProps.width / imgProps.height;
-      const finalImgHeight = pdfWidth / ratio;
-      
-      // If content is longer than one page, we could add more pages, 
-      // but for this worksheet, one page is usually enough if sized right.
-      // We scale it to fit width.
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, finalImgHeight);
-      
-      const fileName = data.address.trim() 
-        ? `wheyland_load_calc_${data.address.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`
-        : 'wheyland_load_calc_worksheet.pdf';
+      // Filename is property address if available, otherwise default
+      const sanitizedAddress = data.address.trim()
+        ? data.address.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+        : 'load_calc_worksheet';
+        
+      const fileName = `${sanitizedAddress}.pdf`;
         
       pdf.save(fileName);
-    } catch (error) {
+    } catch (error: any) {
       console.error('PDF Export failed:', error);
-      alert('PDF Export failed. Please try again or use the print function of your browser.');
+      alert(`PDF Export failed: ${error?.message || 'Please check your connection'}. Try using the browser's print function instead (Ctrl+P).`);
     } finally {
       setIsExporting(false);
     }
@@ -551,118 +585,180 @@ export default function App() {
       </div>
 
       {/* Hidden Printable Worksheet */}
-      <div className="absolute opacity-0 pointer-events-none top-0 left-0 -z-50 overflow-hidden" style={{ width: '800px', height: '1px' }}>
+      <div 
+        data-print-container
+        className="fixed left-[-9999px] top-0 pointer-events-none -z-50 bg-white" 
+        style={{ width: '800px' }}
+      >
         <div 
           ref={printRef}
-          className="w-[800px] bg-white p-12 text-slate-900"
+          className="w-[800px] bg-[#ffffff] p-12 pb-24 text-[#0f172a]"
           style={{ fontFamily: 'Inter, sans-serif' }}
         >
-          <div className="flex items-center justify-between mb-8 border-b-2 border-slate-900 pb-6">
-            <div className="flex items-center gap-4">
-              <img src="/logo.png" alt="Wheyland Electric" className="h-20 w-auto" />
+          {/* Professional Header */}
+          <div className="flex items-start justify-between mb-10 border-b-4 border-[#0f172a] pb-8">
+            <div className="flex items-center gap-6">
+              <div className="bg-white p-2 border-2 border-[#f1f5f9] rounded-xl shadow-sm">
+                <img src="/logo.png" alt="Wheyland Electric" className="h-16 w-auto" />
+              </div>
               <div className="text-left">
-                <h1 className="text-2xl font-black uppercase tracking-tight leading-none">Wheyland Electric</h1>
-                <p className="text-xs font-bold text-slate-500 mt-1 uppercase">Load Calculation Worksheet</p>
-                <p className="text-[9px] text-slate-400 mt-0.5">License # 940291</p>
+                <h1 className="text-3xl font-black uppercase tracking-tighter leading-none text-[#0f172a]">Wheyland Electric</h1>
+                <div className="flex items-center gap-3 mt-2">
+                  <span className="text-[10px] bg-[#f1f5f9] px-2 py-0.5 font-black uppercase tracking-widest text-[#64748b] rounded">License # 940291</span>
+                  <div className="h-1 w-1 rounded-full bg-[#cbd5e1]" />
+                  <span className="text-[10px] font-bold text-[#94a3b8]">EST. 2009</span>
+                </div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-sm font-black bg-slate-900 text-white py-1.5 px-4 inline-block italic">NEC 220.80 OPTIONAL METHOD</div>
-              <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-tighter">Single Family Dwelling</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-8 mb-8 pb-4 border-b border-slate-200">
-            <div>
-              <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Property Address</p>
-              <p className="font-bold border-b border-slate-300 pb-1">{data.address || 'N/A'}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Service Rating</p>
-                <p className="font-bold border-b border-slate-300 pb-1">{data.serviceRating} Amps</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Bus Rating</p>
-                <p className="font-bold border-b border-slate-300 pb-1">{data.busRating} Amps</p>
-              </div>
+            <div className="text-right flex flex-col items-end">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#94a3b8] mb-1">Standard Reference</span>
+              <div className="text-sm font-black border-2 border-[#0f172a] py-1.5 px-4 inline-block italic rotate-[-1deg]">NEC 220.80 OPTIONAL METHOD</div>
+              <p className="text-[11px] font-bold text-[#0f172a] mt-3 uppercase tracking-tighter opacity-70">Single Family Dwelling Computation</p>
             </div>
           </div>
 
-          <div className="space-y-6">
-            <PrintSection number="1" title="General Lighting Loads">
-              <PrintLine label={`Dwelling Area (${data.sqft} sq. ft. x 3 VA)`} value={calcs.lightingVA} />
-              <PrintLine label={`Small appliance loads - 220.16(a) 1500 VA x ${data.smallApplianceCircuits} circuits`} value={calcs.smallApplianceVA} />
-              <PrintLine label={`Laundry load - 220-16(b) 1500 VA x ${data.laundryCircuits} circuits`} value={calcs.laundryVA} />
-              <PrintTotal label="General Lighting Total" value={calcs.generalLightingTotal} />
-            </PrintSection>
-
-            <PrintSection number="2" title="Cooking Equipment Loads - Nameplate Value">
-              <PrintLine label="Range" value={data.rangeVA} />
-              <PrintLine label="Cooktop" value={data.cooktopVA} />
-              <PrintLine label="Oven(s)" value={data.ovenVA} />
-              <PrintTotal label="Cooking Equipment Total" value={calcs.cookingTotal} />
-            </PrintSection>
-
-            <PrintSection number="3" title="Electric Dryer 220.54 (5000 VA minimum)">
-              <PrintTotal label="Dryer Total" value={calcs.dryerTotal} />
-            </PrintSection>
-
-            <PrintSection number="4" title="Fixed Appliance Loads 230.30(b)(3)">
-              <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-                <PrintLine label="Dishwasher" value={data.dishwasherVA} />
-                <PrintLine label="Disposal" value={data.disposalVA} />
-                <PrintLine label="Compactor" value={data.compactorVA} />
-                <PrintLine label="Water Heater" value={data.waterHeaterVA} />
-                <PrintLine label="Hydromassage Bathtub" value={data.hydroTubVA} />
-                <PrintLine label="Microwave Oven" value={data.microwaveVA} />
-                <PrintLine label="Built-in Vacuum" value={data.builtInVacVA} />
-                {data.customFixedLoads.map(load => (
-                  <React.Fragment key={load.id}>
-                    <PrintLine label={load.name || 'Custom Appliance'} value={load.va} />
-                  </React.Fragment>
-                ))}
+          {/* Property Context Grid */}
+          <div className="grid grid-cols-12 gap-6 mb-10">
+            <div className="col-span-7 bg-[#f8fafc] p-4 border border-[#e2e8f0] rounded-lg">
+              <p className="text-[9px] font-black uppercase text-[#94a3b8] mb-1.5 tracking-widest flex items-center gap-2">
+                <MapPin size={10} /> Property Address
+              </p>
+              <p className="text-sm font-bold text-[#1e293b] leading-tight">{data.address || 'SPECIFIED PROPERTY ADDRESS NOT PROVIDED'}</p>
+            </div>
+            <div className="col-span-5 grid grid-cols-2 gap-3">
+              <div className="bg-[#f8fafc] border-2 border-[#0f172a] p-4 rounded-lg flex flex-col justify-center text-center">
+                <p className="text-[8px] font-black uppercase text-[#64748b] mb-1">Service Rating</p>
+                <p className="text-lg font-black text-[#0f172a] font-mono">{data.serviceRating}A</p>
               </div>
-              <PrintTotal label="Fixed Appliance Total" value={calcs.fixedTotal} />
-            </PrintSection>
+              <div className="bg-[#f1f5f9] p-4 rounded-lg flex flex-col justify-center text-center border border-[#e2e8f0]">
+                <p className="text-[8px] font-black uppercase text-[#64748b] mb-1">Bus Rating</p>
+                <p className="text-lg font-black text-[#1e293b] font-mono">{data.busRating}A</p>
+              </div>
+            </div>
+          </div>
 
-            <div className="pt-4 border-t-2 border-slate-900">
-              <PrintTotal label="5. Optional Subtotal (Add lines 1-4)" value={calcs.optionalSubtotal} large />
+          {/* Computation Sections */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-x-12 items-start">
+              <div className="space-y-6">
+                <PrintSection number="1" title="General Lighting Loads">
+                  <PrintLine label={`Dwelling Area (${data.sqft} sq. ft. x 3 VA)`} value={calcs.lightingVA} />
+                  <PrintLine label={`Small Appliance (${data.smallApplianceCircuits} x 1500 VA)`} value={calcs.smallApplianceVA} />
+                  <PrintLine label={`Laundry (${data.laundryCircuits} x 1500 VA)`} value={calcs.laundryVA} />
+                  <PrintTotal label="General Lighting Subtotal" value={calcs.generalLightingTotal} />
+                </PrintSection>
+
+                <PrintSection number="2" title="Cooking Equipment">
+                  <PrintLine label="Standard Range" value={data.rangeVA} />
+                  <PrintLine label="Individual Cooktop" value={data.cooktopVA} />
+                  <PrintLine label="Counter-Mounted Ovens" value={data.ovenVA} />
+                  <PrintTotal label="Cooking Total" value={calcs.cookingTotal} />
+                </PrintSection>
+
+                <PrintSection number="3" title="Electric Drying">
+                  <PrintLine label="Appliance Nameplate (5000 VA min)" value={data.dryerVA} />
+                  <PrintTotal label="Dryer Subtotal" value={calcs.dryerTotal} />
+                </PrintSection>
+              </div>
+
+              <div className="space-y-6">
+                <PrintSection number="4" title="Fixed Appliance Assets">
+                  <div className="space-y-1">
+                    <PrintLine label="Dishwasher" value={data.dishwasherVA} />
+                    <PrintLine label="Waste Disposal" value={data.disposalVA} />
+                    <PrintLine label="Trash Compactor" value={data.compactorVA} />
+                    <PrintLine label="Storage Water Heater" value={data.waterHeaterVA} />
+                    <PrintLine label="Hydromassage Tub" value={data.hydroTubVA} />
+                    <PrintLine label="Microwave Oven" value={data.microwaveVA} />
+                    <PrintLine label="Built-in Vacuum" value={data.builtInVacVA} />
+                    {data.customFixedLoads.map(load => (
+                      <React.Fragment key={load.id}>
+                        <PrintLine label={load.name || 'Custom Appliance'} value={load.va} />
+                      </React.Fragment>
+                    ))}
+                  </div>
+                  <PrintTotal label="Fixed appliance Subtotal" value={calcs.fixedTotal} />
+                </PrintSection>
+              </div>
             </div>
 
-            <PrintSection number="6" title="Applying Demand Factors 220.82(b)">
-              <PrintLine label="First 10,000 VA x 100%" value={10000} />
-              <PrintLine label={`Remainder (${Math.max(0, calcs.optionalSubtotal - 10000).toLocaleString()} VA) x 40%`} value={Math.max(0, calcs.optionalSubtotal - 10000) * 0.4} underline />
-              <PrintTotal label="Demand Factor Result" value={calcs.demandFactorResult} />
-            </PrintSection>
+            <div className="pt-2">
+              <PrintTotal label="5. Gross Optional Subtotal (Sum of 1 through 4)" value={calcs.optionalSubtotal} large />
+            </div>
 
-            <PrintSection number="7" title="Heating or AC Load - Table 220.82(c)">
-              <PrintLine label={`Larger of Heating (${data.heatingVA.toLocaleString()} VA) or AC (${data.acVA.toLocaleString()} VA)`} value={calcs.heatingACResult} />
-            </PrintSection>
+            <div className="grid grid-cols-2 gap-x-12 mt-6">
+              <PrintSection number="6" title="Load Remainder Application">
+                <PrintLine label="Base Load Selection (First 10,000 VA)" value={10000} />
+                <PrintLine label={`Marginal Demand (${Math.max(0, calcs.optionalSubtotal - 10000).toLocaleString()} VA x 40%)`} value={Math.max(0, calcs.optionalSubtotal - 10000) * 0.4} underline />
+                <PrintTotal label="Adjusted Base Total" value={calcs.demandFactorResult} />
+              </PrintSection>
 
-            <div className="pt-4 border-t-2 border-slate-900 space-y-4">
-              <div className="flex justify-between items-end">
-                <span className="text-sm font-black uppercase">8. Optional Loads Total (Add lines 6 and 7)</span>
-                <span className="text-xl font-bold border-b-2 border-slate-900 w-32 text-right">{Math.round(calcs.totalVA).toLocaleString()} VA</span>
+              <PrintSection number="7" title="Thermal Control Systems">
+                <PrintLine label={`Climatization Peak (Max of Heat/AC)`} value={calcs.heatingACResult} />
+                <div className="mt-2 pl-2">
+                  <div className="flex justify-between items-center text-[9px] text-[#94a3b8] italic">
+                    <span>Heating: {data.heatingVA.toLocaleString()} VA</span>
+                    <span>A/C: {data.acVA.toLocaleString()} VA</span>
+                  </div>
+                </div>
+                <PrintTotal label="Thermal Total" value={calcs.heatingACResult} />
+              </PrintSection>
+            </div>
+
+            {/* FINAL COMPUTATION BOX */}
+            <div className="mt-10 pt-10 border-t-4 border-[#0f172a] relative">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white px-6 py-0.5 border-2 border-[#0f172a] rounded-full">
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#0f172a]">Final Computational Summary</span>
               </div>
-              <div className="bg-slate-50 p-6 border-b-4 border-slate-900">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="text-lg font-black uppercase tracking-tight">9. Minimum Service Size</h3>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Optional Loads Total / {data.systemVoltage} Volts</p>
+              
+              <div className="flex items-center justify-between gap-12">
+                <div className="flex-1 space-y-4">
+                  <div className="flex justify-between items-end border-b border-[#e2e8f0] pb-2">
+                    <span className="text-[11px] font-black uppercase tracking-tight text-[#64748b]">8. Total Calculated Optional Load (6 + 7)</span>
+                    <span className="text-xl font-black font-mono">{Math.round(calcs.totalVA).toLocaleString()} <span className="text-xs text-[#94a3b8] font-bold">VA</span></span>
                   </div>
-                  <div className="text-right">
-                    <span className="text-4xl font-black">{calcs.minAmps.toFixed(1)}</span>
-                    <span className="text-xl font-bold ml-1">Amps</span>
+                  <div className="flex justify-between items-center bg-[#f8fafc] p-4 rounded-xl border border-[#e2e8f0]">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white border-2 border-[#0f172a] p-2 rounded-lg text-[#0f172a]">
+                        <Zap size={16} />
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase text-[#94a3b8] tracking-widest">Calculated Current</p>
+                        <p className="text-[10px] font-bold text-[#64748b]">Total {calcs.totalVA.toLocaleString()} VA / {data.systemVoltage}V</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-3xl font-black font-mono text-[#0f172a] tracking-tight">{calcs.minAmps.toFixed(1)}</span>
+                      <span className="text-lg font-black ml-1 text-[#0f172a]">A</span>
+                    </div>
                   </div>
+                </div>
+
+                <div className="w-[200px] h-32 border-4 border-[#0f172a] bg-white text-[#0f172a] rounded-2xl flex flex-col items-center justify-center relative shadow-lg">
+                  <div className="absolute -top-3 bg-white text-[#0f172a] border-2 border-[#0f172a] px-3 py-0.5 rounded-full text-[9px] font-black uppercase">Result</div>
+                  <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mb-1">Recommended Service</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-5xl font-black italic">{calcs.minAmps.toFixed(0)}</span>
+                    <span className="text-xl font-black">AMP</span>
+                  </div>
+                  <div className="mt-2 text-[9px] font-black px-2 py-0.5 bg-[#f1f5f9] rounded uppercase border border-[#e2e8f0]">NEC Minimum Size</div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-12 text-[9px] text-slate-400 italic">
-            * Generated by Wheyland Electric Load Calc - NEC 220.80 Optional Method Worksheet.
-            This calculation is for estimating purposes based on user input.
+          {/* Footer Metadata */}
+          <div className="mt-16 pt-8 border-t border-[#f1f5f9] flex justify-between items-end">
+            <div className="text-[9px] text-[#94a3b8] uppercase tracking-widest flex flex-col gap-1">
+              <span className="font-black text-[#64748b]">Engineering Reference: NEC 220.80</span>
+              <span>Generated on {new Date().toLocaleDateString()} @ {new Date().toLocaleTimeString()}</span>
+              <span className="italic mt-2">© Wheyland Electric Load Computation System v2.0 - Certified Output</span>
+            </div>
+            <div className="text-right">
+              <div className="inline-block p-2 border-2 border-[#f1f5f9] rounded-lg">
+                <img src="/logo.png" alt="Wheyland Electric" className="h-8 w-auto opacity-30 grayscale" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -672,12 +768,12 @@ export default function App() {
 
 function PrintSection({ number, title, children }: { number: string, title: string, children: React.ReactNode }) {
   return (
-    <div className="space-y-1">
-      <div className="flex gap-2 items-baseline">
-        <span className="font-black text-sm">{number}.</span>
-        <h3 className="font-black text-xs uppercase tracking-tight text-slate-700">{title}</h3>
+    <div className="space-y-2 mb-6">
+      <div className="flex gap-2 items-center bg-[#f8fafc] border-l-4 border-[#0f172a] px-3 py-1.5">
+        <span className="font-black text-xs text-[#0f172a] opacity-50">{number}.</span>
+        <h3 className="font-black text-[11px] uppercase tracking-wider text-[#0f172a]">{title}</h3>
       </div>
-      <div className="pl-6 space-y-1">
+      <div className="pl-4 space-y-1.5">
         {children}
       </div>
     </div>
@@ -686,13 +782,13 @@ function PrintSection({ number, title, children }: { number: string, title: stri
 
 function PrintLine({ label, value, underline = false }: { label: string, value: number, underline?: boolean }) {
   return (
-    <div className="flex justify-between items-end text-[11px]">
-      <span className="text-slate-600">{label}</span>
-      <div className="flex items-end gap-1">
-        <span className={`font-medium min-w-[80px] text-right ${underline ? 'border-b border-slate-400' : ''}`}>
+    <div className="flex justify-between items-end border-b border-[#f1f5f9] pb-0.5 last:border-0">
+      <span className="text-[10.5px] text-[#475569]">{label}</span>
+      <div className="flex items-baseline gap-1.5">
+        <span className={`font-mono text-[11px] font-bold min-w-[80px] text-right ${underline ? 'bg-[#fef3c7] px-1' : ''}`}>
           {Math.round(value).toLocaleString()}
         </span>
-        <span className="text-slate-400 font-bold text-[9px]">VA</span>
+        <span className="text-[#94a3b8] font-bold text-[8px] uppercase">VA</span>
       </div>
     </div>
   );
@@ -700,13 +796,13 @@ function PrintLine({ label, value, underline = false }: { label: string, value: 
 
 function PrintTotal({ label, value, large = false }: { label: string, value: number, large?: boolean }) {
   return (
-    <div className={`flex justify-between items-end mt-1 ${large ? 'py-2' : ''}`}>
-      <span className={`${large ? 'text-sm font-black' : 'text-xs font-bold'} uppercase text-slate-800`}>{label}</span>
-      <div className="flex items-end gap-1">
-        <span className={`${large ? 'text-xl font-black border-b-2' : 'text-[13px] font-black border-b'} border-slate-900 min-w-[100px] text-right`}>
+    <div className={`flex justify-between items-baseline mt-2 ${large ? 'py-3 bg-[#f8fafc] px-4 -mx-4 border-y border-[#e2e8f0]' : 'pt-1'}`}>
+      <span className={`${large ? 'text-[12px] font-black' : 'text-[10px] font-extrabold'} uppercase tracking-tight text-[#0f172a]`}>{label}</span>
+      <div className="flex items-baseline gap-1.5 text-[#0f172a]">
+        <span className={`${large ? 'text-lg font-black' : 'text-sm font-black'} font-mono min-w-[100px] text-right`}>
           {Math.round(value).toLocaleString()}
         </span>
-        <span className="text-slate-500 font-black text-[10px]">VA</span>
+        <span className={`${large ? 'text-[10px]' : 'text-[9px]'} font-black opacity-50`}>VA</span>
       </div>
     </div>
   );

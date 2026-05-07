@@ -1,0 +1,6 @@
+{
+  "name": "Wheyland Electric Load Calc Worksheet",
+  "description": "An NEC 220.80 Optional Method load calculator for Wheyland Electric, designed for single-family dwellings with automated demand factor application and service sizing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

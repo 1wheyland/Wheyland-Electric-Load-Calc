@@ -43,17 +43,22 @@ interface LoadData {
   
   // 2. Cooking Equipment
   rangeVA: number;
+  isRangeGas: boolean;
   cooktopVA: number;
+  isCooktopGas: boolean;
   ovenVA: number;
+  isOvenGas: boolean;
   
   // 3. Electric Dryer
   dryerVA: number;
+  isDryerGas: boolean;
   
   // 4. Fixed Appliances
   dishwasherVA: number;
   disposalVA: number;
   compactorVA: number;
   waterHeaterVA: number;
+  isWaterHeaterGas: boolean;
   hydroTubVA: number;
   microwaveVA: number;
   builtInVacVA: number;
@@ -75,13 +80,18 @@ const initialData: LoadData = {
   smallApplianceCircuits: 2,
   laundryCircuits: 1,
   rangeVA: 0,
+  isRangeGas: false,
   cooktopVA: 0,
+  isCooktopGas: false,
   ovenVA: 0,
+  isOvenGas: false,
   dryerVA: 0,
+  isDryerGas: false,
   dishwasherVA: 0,
   disposalVA: 0,
   compactorVA: 0,
   waterHeaterVA: 0,
+  isWaterHeaterGas: false,
   hydroTubVA: 0,
   microwaveVA: 0,
   builtInVacVA: 0,
@@ -104,10 +114,15 @@ export default function App() {
     const generalLightingTotal = lightingVA + smallApplianceVA + laundryVA;
 
     // 2. Cooking Equipment
-    const cookingTotal = data.rangeVA + data.cooktopVA + data.ovenVA;
+    const cookingTotal = 
+      (data.isRangeGas ? 0 : data.rangeVA) + 
+      (data.isCooktopGas ? 0 : data.cooktopVA) + 
+      (data.isOvenGas ? 0 : data.ovenVA);
 
-    // 3. Dryer (min 5000)
-    const dryerTotal = data.dryerVA > 0 ? Math.max(5000, data.dryerVA) : 0;
+    // 3. Dryer (min 5000 if electric)
+    const dryerTotal = data.dryerVA > 0 
+      ? (data.isDryerGas ? data.dryerVA : Math.max(5000, data.dryerVA)) 
+      : 0;
 
     // 4. Fixed Appliances
     const customFixedTotal = data.customFixedLoads.reduce((sum, load) => sum + load.va, 0);
@@ -115,7 +130,7 @@ export default function App() {
       data.dishwasherVA + 
       data.disposalVA + 
       data.compactorVA + 
-      data.waterHeaterVA + 
+      (data.isWaterHeaterGas ? 0 : data.waterHeaterVA) + 
       data.hydroTubVA + 
       data.microwaveVA + 
       data.builtInVacVA + 
@@ -365,20 +380,79 @@ export default function App() {
           {/* 2 & 3. Cooking & Dryer */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Section icon={<Coffee size={20} />} title="2. Cooking Equipment">
-              <div className="space-y-4">
-                <SmartInputField label="Range" value={data.rangeVA} onChange={(va) => handleChange('rangeVA', va)} />
-                <SmartInputField label="Cooktop" value={data.cooktopVA} onChange={(va) => handleChange('cooktopVA', va)} />
-                <SmartInputField label="Oven(s)" value={data.ovenVA} onChange={(va) => handleChange('ovenVA', va)} />
+              <div className="space-y-6">
+                {[
+                  { label: 'Standard Range', field: 'rangeVA', gasField: 'isRangeGas' },
+                  { label: 'Individual Cooktop', field: 'cooktopVA', gasField: 'isCooktopGas' },
+                  { label: 'Counter-Mounted Oven', field: 'ovenVA', gasField: 'isOvenGas' }
+                ].map((item) => (
+                  <div key={item.field} className="space-y-3 bg-slate-50/30 p-3 rounded-2xl border border-slate-100">
+                    <div className="flex justify-between items-center px-1">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{item.label} Type</span>
+                      <div className="flex bg-white rounded-lg p-0.5 scale-90 origin-right border border-slate-200 shadow-sm">
+                        <button 
+                          type="button"
+                          onClick={() => setData(prev => ({ ...prev, [item.gasField]: false }))}
+                          className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${!data[item.gasField as keyof LoadData] ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                          ELECTRIC
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setData(prev => ({ ...prev, [item.gasField]: true }))}
+                          className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${data[item.gasField as keyof LoadData] ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                          GAS
+                        </button>
+                      </div>
+                    </div>
+                    {data[item.gasField as keyof LoadData] ? (
+                      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-400 italic flex items-center gap-2">
+                        <RefreshCcw size={12} className="animate-spin" />
+                        Gas selected (0 VA recorded load)
+                      </div>
+                    ) : (
+                      <SmartInputField 
+                        label={item.label} 
+                        value={data[item.field as keyof LoadData] as number} 
+                        onChange={(va) => handleChange(item.field as keyof LoadData, va)} 
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
             </Section>
             
             <Section icon={<Zap size={20} />} title="3. Electric Dryer">
-              <SmartInputField 
-                label="Dryer" 
-                value={data.dryerVA} 
-                onChange={(va) => handleChange('dryerVA', va)} 
-                helperText="Minimum 5000 VA enforced."
-              />
+              <div className="space-y-6">
+                <div className="bg-slate-50/30 p-3 rounded-2xl border border-slate-100 space-y-3">
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Dryer Type</span>
+                    <div className="flex bg-white rounded-lg p-0.5 scale-90 origin-right border border-slate-200 shadow-sm">
+                      <button 
+                        type="button"
+                        onClick={() => setData(prev => ({ ...prev, isDryerGas: false }))}
+                        className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${!data.isDryerGas ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        ELECTRIC
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setData(prev => ({ ...prev, isDryerGas: true }))}
+                        className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${data.isDryerGas ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        GAS
+                      </button>
+                    </div>
+                  </div>
+                  <SmartInputField 
+                    label={data.isDryerGas ? "Gas Dryer (Motor/Control)" : "Electric Dryer"} 
+                    value={data.dryerVA} 
+                    onChange={(va) => handleChange('dryerVA', va)} 
+                    helperText={data.isDryerGas ? "Gas dryer typically 500-1000 VA." : "Minimum 5000 VA enforced for electric."}
+                  />
+                </div>
+              </div>
             </Section>
           </div>
 
@@ -388,7 +462,35 @@ export default function App() {
               <SmartInputField label="Dishwasher" value={data.dishwasherVA} onChange={(va) => handleChange('dishwasherVA', va)} />
               <SmartInputField label="Disposal" value={data.disposalVA} onChange={(va) => handleChange('disposalVA', va)} />
               <SmartInputField label="Compactor" value={data.compactorVA} onChange={(va) => handleChange('compactorVA', va)} />
-              <SmartInputField label="Water Heater" value={data.waterHeaterVA} onChange={(va) => handleChange('waterHeaterVA', va)} />
+              
+              <div className="bg-slate-50/30 p-3 rounded-2xl border border-slate-100 space-y-3">
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Water Heater Type</span>
+                  <div className="flex bg-white rounded-lg p-0.5 scale-90 origin-right border border-slate-200 shadow-sm">
+                    <button 
+                      type="button"
+                      onClick={() => setData(prev => ({ ...prev, isWaterHeaterGas: false }))}
+                      className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${!data.isWaterHeaterGas ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      ELECTRIC
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setData(prev => ({ ...prev, isWaterHeaterGas: true }))}
+                      className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${data.isWaterHeaterGas ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      GAS
+                    </button>
+                  </div>
+                </div>
+                {data.isWaterHeaterGas ? (
+                  <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-400 italic">
+                    Gas selected (0 VA load)
+                  </div>
+                ) : (
+                  <SmartInputField label="Storage Water Heater" value={data.waterHeaterVA} onChange={(va) => handleChange('waterHeaterVA', va)} />
+                )}
+              </div>
               <SmartInputField label="Hydromassage Tub" value={data.hydroTubVA} onChange={(va) => handleChange('hydroTubVA', va)} />
               <SmartInputField label="Microwave Oven" value={data.microwaveVA} onChange={(va) => handleChange('microwaveVA', va)} />
               <SmartInputField label="Built-in Vacuum" value={data.builtInVacVA} onChange={(va) => handleChange('builtInVacVA', va)} />
@@ -501,14 +603,22 @@ export default function App() {
 
               <div className="p-6 space-y-4">
                 <SummaryItem label="1. Gen. Lighting Total" value={calcs.generalLightingTotal} />
-                <SummaryItem label="2. Cooking Total" value={calcs.cookingTotal} />
+                <SummaryItem 
+                  label="2. Cooking Total" 
+                  value={calcs.cookingTotal} 
+                  note={data.isRangeGas || data.isCooktopGas || data.isOvenGas ? "(GAS UNITS USED)" : undefined}
+                />
                 <SummaryItem 
                   label="3. Dryer Total" 
                   value={calcs.dryerTotal} 
                   highlight 
-                  note={data.dryerVA > 0 && data.dryerVA < 5000 ? "(MIN 5000VA APPLIED)" : undefined}
+                  note={!data.isDryerGas && data.dryerVA > 0 && data.dryerVA < 5000 ? "(MIN 5000VA APPLIED)" : (data.isDryerGas ? "(GAS UNIT)" : undefined)}
                 />
-                <SummaryItem label="4. Fixed Appliance Total" value={calcs.fixedTotal} />
+                <SummaryItem 
+                  label="4. Fixed Appliance Total" 
+                  value={calcs.fixedTotal} 
+                  note={data.isWaterHeaterGas ? "(WATER HEATER BY GAS)" : undefined}
+                />
                 
                 <div className="pt-4 border-t border-slate-100">
                   <SummaryItem label="5. Optional Subtotal" value={calcs.optionalSubtotal} bold />
@@ -649,14 +759,20 @@ export default function App() {
                 </PrintSection>
 
                 <PrintSection number="2" title="Cooking Equipment">
-                  <PrintLine label="Standard Range" value={data.rangeVA} />
-                  <PrintLine label="Individual Cooktop" value={data.cooktopVA} />
-                  <PrintLine label="Counter-Mounted Ovens" value={data.ovenVA} />
+                  <PrintLine label={`Standard Range ${data.isRangeGas ? '(GAS)' : ''}`} value={data.isRangeGas ? 0 : data.rangeVA} />
+                  <PrintLine label={`Individual Cooktop ${data.isCooktopGas ? '(GAS)' : ''}`} value={data.isCooktopGas ? 0 : data.cooktopVA} />
+                  <PrintLine label={`Counter-Mounted Ovens ${data.isOvenGas ? '(GAS)' : ''}`} value={data.isOvenGas ? 0 : data.ovenVA} />
                   <PrintTotal label="Cooking Total" value={calcs.cookingTotal} />
                 </PrintSection>
 
-                <PrintSection number="3" title="Electric Drying">
-                  <PrintLine label="Appliance Nameplate (5000 VA min)" value={data.dryerVA} />
+                <PrintSection number="3" title={data.isDryerGas ? "Gas Drying" : "Electric Drying"}>
+                  <PrintLine 
+                    label={data.isDryerGas ? "Dryer (Gas unit electronics)" : "Appliance Nameplate (5000 VA min)"} 
+                    value={data.dryerVA} 
+                  />
+                  {!data.isDryerGas && data.dryerVA > 0 && data.dryerVA < 5000 && (
+                    <div className="text-[8px] text-[#94a3b8] italic pl-2">*(NEC 5000 VA minimum applied)</div>
+                  )}
                   <PrintTotal label="Dryer Subtotal" value={calcs.dryerTotal} />
                 </PrintSection>
               </div>
@@ -667,7 +783,7 @@ export default function App() {
                     <PrintLine label="Dishwasher" value={data.dishwasherVA} />
                     <PrintLine label="Waste Disposal" value={data.disposalVA} />
                     <PrintLine label="Trash Compactor" value={data.compactorVA} />
-                    <PrintLine label="Storage Water Heater" value={data.waterHeaterVA} />
+                    <PrintLine label={`Storage Water Heater ${data.isWaterHeaterGas ? '(GAS)' : '(ELEC)'}`} value={data.isWaterHeaterGas ? 0 : data.waterHeaterVA} />
                     <PrintLine label="Hydromassage Tub" value={data.hydroTubVA} />
                     <PrintLine label="Microwave Oven" value={data.microwaveVA} />
                     <PrintLine label="Built-in Vacuum" value={data.builtInVacVA} />
@@ -812,12 +928,14 @@ function SmartInputField({
   label, 
   value, 
   onChange, 
-  helperText 
+  helperText,
+  hideLabel = false
 }: { 
   label: string, 
   value: number, 
   onChange: (va: number) => void,
-  helperText?: string
+  helperText?: string,
+  hideLabel?: boolean
 }) {
   const [unit, setUnit] = useState<'VA' | 'Amps'>('VA');
   const [voltage, setVoltage] = useState<'120' | '240'>('240');
@@ -915,9 +1033,13 @@ function SmartInputField({
   return (
     <div className="space-y-1.5">
       <div className="flex justify-between items-center px-1">
-        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-          {label}
-        </label>
+        {!hideLabel ? (
+          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            {label}
+          </label>
+        ) : (
+          <div />
+        )}
         <div className="flex bg-slate-100 rounded-full p-0.5 scale-90 origin-right border border-slate-200">
           <button 
             type="button"

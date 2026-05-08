@@ -382,9 +382,9 @@ export default function App() {
             <Section icon={<Coffee size={20} />} title="2. Cooking Equipment">
               <div className="space-y-6">
                 {[
-                  { label: 'Standard Range', field: 'rangeVA', gasField: 'isRangeGas' },
-                  { label: 'Individual Cooktop', field: 'cooktopVA', gasField: 'isCooktopGas' },
-                  { label: 'Counter-Mounted Oven', field: 'ovenVA', gasField: 'isOvenGas' }
+                  { label: 'Range', field: 'rangeVA', gasField: 'isRangeGas' },
+                  { label: 'Cooktop', field: 'cooktopVA', gasField: 'isCooktopGas' },
+                  { label: 'Oven', field: 'ovenVA', gasField: 'isOvenGas' }
                 ].map((item) => (
                   <div key={item.field} className="space-y-3 bg-slate-50/30 p-3 rounded-2xl border border-slate-100">
                     <div className="flex justify-between items-center px-1">
@@ -446,7 +446,7 @@ export default function App() {
                     </div>
                   </div>
                   <SmartInputField 
-                    label={data.isDryerGas ? "Gas Dryer (Motor/Control)" : "Electric Dryer"} 
+                    label="Dryer" 
                     value={data.dryerVA} 
                     onChange={(va) => handleChange('dryerVA', va)} 
                     helperText={data.isDryerGas ? "Gas dryer typically 500-1000 VA." : "Minimum 5000 VA enforced for electric."}
@@ -759,15 +759,15 @@ export default function App() {
                 </PrintSection>
 
                 <PrintSection number="2" title="Cooking Equipment">
-                  <PrintLine label={`Standard Range ${data.isRangeGas ? '(GAS)' : ''}`} value={data.isRangeGas ? 0 : data.rangeVA} />
-                  <PrintLine label={`Individual Cooktop ${data.isCooktopGas ? '(GAS)' : ''}`} value={data.isCooktopGas ? 0 : data.cooktopVA} />
-                  <PrintLine label={`Counter-Mounted Ovens ${data.isOvenGas ? '(GAS)' : ''}`} value={data.isOvenGas ? 0 : data.ovenVA} />
+                  <PrintLine label={`Range ${data.isRangeGas ? '(GAS)' : ''}`} value={data.isRangeGas ? 0 : data.rangeVA} />
+                  <PrintLine label={`Cooktop ${data.isCooktopGas ? '(GAS)' : ''}`} value={data.isCooktopGas ? 0 : data.cooktopVA} />
+                  <PrintLine label={`Oven ${data.isOvenGas ? '(GAS)' : ''}`} value={data.isOvenGas ? 0 : data.ovenVA} />
                   <PrintTotal label="Cooking Total" value={calcs.cookingTotal} />
                 </PrintSection>
 
                 <PrintSection number="3" title={data.isDryerGas ? "Gas Drying" : "Electric Drying"}>
                   <PrintLine 
-                    label={data.isDryerGas ? "Dryer (Gas unit electronics)" : "Appliance Nameplate (5000 VA min)"} 
+                    label="Dryer" 
                     value={data.dryerVA} 
                   />
                   {!data.isDryerGas && data.dryerVA > 0 && data.dryerVA < 5000 && (
